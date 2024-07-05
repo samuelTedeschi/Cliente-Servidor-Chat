@@ -66,7 +66,7 @@ int main (){
             ERR_print_errors_fp(stderr);
         }else {
             pthread_mutex_lock(&clients_mutex);
-            for (int i = 0, i < MAX_CLIENTS; i++){
+            for (int i = 0, i < MAX_CLIENTS; ++i){
                 if (client_sockets[i] == 0){
                     client_sockets[i] == new_socked;
                     pthread_create(&tid, NULL, handle_client, (void *)ssl);
@@ -81,4 +81,64 @@ int main (){
     cleanup_openssl();
     return 0;
 
+}
+
+void *handle_client(void *arg){
+    SSL *sll = (SSL *)arg;
+    char buffer[BUF_SIZE];
+    int nbytes;
+
+    while((nbytes = SSL_read(ssl, buffer, BUF_SIZE)) > 0){
+        buffer[nbytes] = '\0';
+        send_message_to_all(buffer, SSL_get_fd(ssl));
+    }
+
+    close(SSL_get_fd(ssl));
+    SSL_free(ssl);
+
+    pthread_mutex_lock(&clients_mutex);
+    for (int i = 0; i < MAX_CLIENTS; ++i){
+        if (client_sockets[i] == SSl_get_fd(ssl)) {
+            client_sockets[i] = 0;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+
+    return NULL;
+}
+
+void send_message_to_all(char *message, int exclude_fd){
+    pthread_mutex_lock(&clients_mutex);
+    for ( int i = 0; i < MAX_CLIENTS; ++i){
+        if (client_sockets[i] != 0 && client_sockets[i] != exclude_fd){
+            SSL_write(SSL_new(ctx), message, strlen(message));
+        }
+    }
+    pthread_mutex_unlock(&clients_mutex);
+}
+
+void init_openssl(){
+    SSL_load_error_strings();
+    OpenSLL_add_ssl_algorithms();
+}
+
+void cleanup_openssl(){
+    EVP_cleanup();
+}
+
+SLL_CTX *create_context(){
+    const SSL_METHOD *method;
+    SSL_CTX *ctx;
+
+    method = SSLv23_server_method();
+
+    ctx = SSL_CTX_new(method);
+    if (!ctx){
+        perror("unable to create ssl context");
+        ERR_print_errors_fp(stderr);
+        exit(EXIT_FAILURE);
+    }
+
+    return ctx;
 }
